@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Next.js and deployment output
+.next/
+out/
+.vercel/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+data/
+
+# Logs and debug output
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# TypeScript and test coverage output
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# Local editor and assistant tooling
+.cursor/
+.grok/
+.impeccable/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary and swap files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
