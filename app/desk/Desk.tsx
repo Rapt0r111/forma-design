@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowDownToLine, ArrowUpRight, Check, ChevronRight, LayoutGrid, List, Plus, Search, X, LoaderCircle } from "lucide-react";
 import { BrandMark } from "../brand";
 import { author, authorMailto } from "@/lib/contact";
+import { moneyRub as money } from "@/lib/money";
 import { mergeRemoteLeads, rememberVisitorLead } from "@/lib/visitor";
 import "./desk.css";
 
@@ -12,8 +13,7 @@ type Package = "concept" | "full" | "supervision";
 type Lead = { id: string; name: string; contact: string; area: number; package: Package; note: string; status: Status; amount: number; createdAt: string };
 const stages: { id: Status; label: string; color: string }[] = [{id:"new",label:"Новые",color:"#8fb0ff"},{id:"contact",label:"На связи",color:"#e4c28a"},{id:"proposal",label:"Предложение",color:"#c4a3e0"},{id:"won",label:"Сделка",color:"#8fbfa0"}];
 const packages: Record<Package,string> = {concept:"Концепция",full:"Полный проект",supervision:"Авторское сопровождение"};
-const money = (n: number) => new Intl.NumberFormat("ru-RU", {style:"currency",currency:"RUB",maximumFractionDigits:0}).format(n);
-const date = (v: string) => new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(new Date(v));
+const date = (v: string) => new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(new Date(v)).replace(/[\u00A0\u202F\u2009]/g, "\u00A0");
 
 export default function Desk() {
   const [leads,setLeads]=useState<Lead[]>([]);

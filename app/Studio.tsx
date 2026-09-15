@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AuthorContact, Brand, BrandMark } from './brand';
 import { author, authorMailto } from '@/lib/contact';
+import { money } from '@/lib/money';
 import { rememberVisitorLead } from '@/lib/visitor';
 
 const rooms = [
@@ -23,6 +24,7 @@ const rooms = [
   { image: '/living.webp', name: 'Свет внутри', type: 'Квартира · 120 м²', text: 'Открытая планировка, спокойные фактуры и естественный свет.' },
   { image: '/detail.webp', name: 'Новая классика', type: 'Дом · 156 м²', text: 'Лаконичные формы и выразительные детали для неспешной жизни.' },
 ];
+const HERO_MS = 7000;
 
 const packages = [
   { id: 'concept', name: 'Концепция', rate: 2500, detail: 'Планировка, палитра и настроение пространства.', includes: ['Планировка', 'Палитра', 'Moodboard'] },
@@ -39,7 +41,6 @@ const palette = [
   { name: 'Графит', color: '#3a3b35' },
   { name: 'Мел', color: '#f4efe6' },
 ];
-const money = (n: number) => new Intl.NumberFormat('ru-RU').format(n);
 
 function finePointer() {
   return typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -383,7 +384,9 @@ export default function Studio() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
-  const [paused, setPaused] = useState(false);
+  const [hold, setHold] = useState(false);
+  const [heroOn, setHeroOn] = useState(true);
+  const [hidden, setHidden] = useState(false);
   const [faqOpen, setFaqOpen] = useState(0);
   const [sticky, setSticky] = useState(false);
   const [compact, setCompact] = useState(false);
@@ -391,6 +394,8 @@ export default function Studio() {
   const [toTop, setToTop] = useState(false);
   const light = useRef<HTMLDivElement>(null);
   const progress = useRef<HTMLSpanElement>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const remain = useRef(HERO_MS);
   const estimateRef = useRef<HTMLElement>(null);
   const menuBtn = useRef<HTMLButtonElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
@@ -443,34 +448,57 @@ export default function Studio() {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
-    if (paused || reducedMotion()) return;
-    const id = window.setInterval(() => setRoom((r) => (r + 1) % rooms.length), 7000);
-    return () => window.clearInterval(id);
-  }, [paused, room]);
+    remain.current = HERO_MS;
+  }, [room]);
+
+  useEffect(() => {
+    const frozen = hold || !heroOn || hidden || reducedMotion();
+    if (frozen) return;
+    const t0 = performance.now();
+    const id = window.setTimeout(() => {
+      remain.current = HERO_MS;
+      setRoom((r) => (r + 1) % rooms.length);
+    }, remain.current);
+    return () => {
+      window.clearTimeout(id);
+      remain.current = Math.max(80, remain.current - (performance.now() - t0));
+    };
+  }, [hold, heroOn, hidden, room]);
+
+  useEffect(() => {
+    const onVis = () => setHidden(document.hidden);
+    setHidden(document.hidden);
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (menu) return;
+      if (menu || !heroOn) return;
+      if (e.target instanceof HTMLElement && e.target.closest('input, textarea, select')) return;
       if (e.key === 'ArrowRight') setRoom((r) => (r + 1) % rooms.length);
       if (e.key === 'ArrowLeft') setRoom((r) => (r + rooms.length - 1) % rooms.length);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [menu]);
+  }, [menu, heroOn]);
 
   useEffect(() => {
     const hero = document.querySelector('.studio-hero');
     const estimate = estimateRef.current;
     if (!hero || !estimate) return;
-    let heroOn = true;
+    let seenHero = true;
     let estimateOn = false;
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.target === hero) heroOn = entry.isIntersecting;
+          if (entry.target === hero) {
+            seenHero = entry.isIntersecting;
+            setHeroOn(entry.isIntersecting);
+          }
           if (entry.target === estimate) estimateOn = entry.isIntersecting;
         }
-        setSticky(!heroOn && !estimateOn);
+        setSticky(!seenHero && !estimateOn);
       },
       { threshold: 0.12 },
     );
@@ -527,6 +555,26 @@ export default function Studio() {
     const r = e.currentTarget.getBoundingClientRect();
     light.current.style.setProperty('--lx', `${e.clientX - r.left}px`);
     light.current.style.setProperty('--ly', `${e.clientY - r.top}px`);
+  }
+
+  function heroSwipeStart(e: React.PointerEvent<HTMLElement>) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target instanceof Element && e.target.closest('a, button')) return;
+    swipe.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function heroSwipeEnd(e: React.PointerEvent<HTMLElement>) {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    setRoom((r) => (r + (dx < 0 ? 1 : rooms.length - 1)) % rooms.length);
+  }
+
+  function releaseHold(e: React.FocusEvent<HTMLElement>) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setHold(false);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -654,27 +702,36 @@ export default function Studio() {
 
       <main id="main" inert={menu ? true : undefined}>
         <section
-          className={paused ? 'studio-hero is-paused' : 'studio-hero'}
+          className={hold || !heroOn || hidden ? 'studio-hero is-paused' : 'studio-hero'}
+          style={{ ['--hero-ms' as string]: `${HERO_MS}ms` }}
           data-track="view"
-          aria-label="Интерьерная студия FORMA"
+          aria-label="Интерьеры FORMA"
           onMouseMove={heroMove}
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
+          onPointerDown={heroSwipeStart}
+          onPointerUp={heroSwipeEnd}
+          onPointerCancel={() => {
+            swipe.current = null;
+          }}
         >
-          <img
-            className="hero-image is-on"
-            src={active.image}
-            alt={active.text}
-            fetchPriority="high"
-            decoding="async"
-            width={1707}
-            height={1280}
-          />
+          <div className="hero-plates" aria-hidden>
+            {rooms.map((r, i) => (
+              <img
+                key={r.image}
+                className={i === room ? 'hero-image is-on' : 'hero-image'}
+                src={r.image}
+                alt=""
+                fetchPriority={i === 0 ? 'high' : 'auto'}
+                decoding="async"
+                draggable={false}
+                width={1707}
+                height={1280}
+              />
+            ))}
+          </div>
           <div className="hero-shade" />
           <div ref={light} className="hero-light" aria-hidden />
           <div className="hero-copy">
             <div className="hero-top">
-              <span>Интерьеры, в которых хочется жить</span>
               <span className="demo-tag">Студия · концепт 2027</span>
             </div>
             <div className="hero-mid">
@@ -694,36 +751,55 @@ export default function Studio() {
                 <Mag className="btn btn-glass" href={author.telegram}>
                   Связь в Telegram <Send size={16} />
                 </Mag>
-                <Mag className="btn btn-glass" href="#projects">
-                  Смотреть пространства
-                </Mag>
               </div>
             </div>
-            <div className="hero-caption">
-              <span>
+            <div
+              className="hero-caption"
+              onMouseEnter={() => setHold(true)}
+              onMouseLeave={() => setHold(false)}
+              onFocusCapture={() => setHold(true)}
+              onBlurCapture={releaseHold}
+            >
+              <p className="hero-caption-copy" key={active.name}>
                 <strong>{active.name}</strong>
-                <span className="caption-divider">/</span>
-                {active.type}
-              </span>
-              <div className="hero-film" aria-label="Выбор интерьера">
+                <span>{active.type}</span>
+              </p>
+              <div className="hero-progress" aria-hidden>
                 {rooms.map((r, i) => (
-                  <button key={r.name} className={i === room ? 'is-on' : ''} onClick={() => setRoom(i)} aria-label={r.name} aria-pressed={i === room}>
-                    <img src={r.image} alt="" loading="lazy" decoding="async" width={96} height={64} />
+                  <span key={r.name} className={i === room ? 'is-on' : i < room ? 'is-done' : ''}>
+                    {i === room ? <i key={room} /> : <i />}
+                  </span>
+                ))}
+              </div>
+              <div className="hero-film" role="group" aria-label="Выбор интерьера">
+                {rooms.map((r, i) => (
+                  <button
+                    key={r.name}
+                    type="button"
+                    className={i === room ? 'is-on' : ''}
+                    onClick={() => setRoom(i)}
+                    aria-label={r.name}
+                    aria-pressed={i === room}
+                  >
+                    <img src={r.image} alt="" decoding="async" width={96} height={64} />
                   </button>
                 ))}
               </div>
               <div className="hero-controls">
-                <button onClick={() => setRoom((room + rooms.length - 1) % rooms.length)} aria-label="Предыдущий интерьер">
+                <button
+                  type="button"
+                  onClick={() => setRoom((room + rooms.length - 1) % rooms.length)}
+                  aria-label="Предыдущий интерьер"
+                >
                   <ArrowLeft size={16} />
                 </button>
-                <span>0{room + 1} / 0{rooms.length}</span>
-                <div className="hero-progress" aria-hidden>
-                  <i key={room} />
-                </div>
-                <button onClick={() => setRoom((room + 1) % rooms.length)} aria-label="Следующий интерьер">
+                <button type="button" onClick={() => setRoom((room + 1) % rooms.length)} aria-label="Следующий интерьер">
                   <ArrowRight size={16} />
                 </button>
               </div>
+              <p className="sr-only" aria-live="polite">
+                {active.name}. {active.type}
+              </p>
             </div>
           </div>
         </section>

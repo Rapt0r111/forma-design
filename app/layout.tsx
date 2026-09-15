@@ -105,6 +105,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="/fonts.css" />
         <link rel="preload" href="/cormorant-cyr.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/cormorant-lat.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/cormorant-cyr-italic.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/manrope-0.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/manrope-2.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" as="image" href="/interior.webp" type="image/webp" />
