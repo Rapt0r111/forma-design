@@ -33,6 +33,7 @@ const packages = [
 ] as const;
 
 const ticker = ['Свет', 'Тишина', 'Текстура', 'Воздух', 'Дерево', 'Ритм', 'Пропорции', 'Касание', 'Тепло', 'Пустота'];
+const tickerEm = new Set(['Тишина', 'Воздух', 'Касание', 'Пустота']);
 const cycleWords = ['света', 'тишины', 'ритма', 'воздуха'];
 const palette = [
   { name: 'Лён', color: '#d9cbb8' },
@@ -332,23 +333,116 @@ function DealFlow() {
 }
 
 function WordCycle({ words }: { words: string[] }) {
+  const root = useRef<HTMLSpanElement>(null);
   const [i, setI] = useState(0);
+  const [snap, setSnap] = useState(false);
+  const loop = words.length + 1;
+  const shown = i % words.length;
+  const longest = words.reduce((a, b) => (a.length >= b.length ? a : b));
+
   useEffect(() => {
     if (reducedMotion()) return;
-    const id = window.setInterval(() => setI((v) => (v + 1) % words.length), 2800);
-    return () => window.clearInterval(id);
-  }, [words.length]);
+    const el = root.current;
+    if (!el) return;
+    let id = 0;
+    const play = () => {
+      if (id) return;
+      id = window.setInterval(() => setI((v) => v + 1), 2800);
+    };
+    const stop = () => {
+      window.clearInterval(id);
+      id = 0;
+    };
+    const onVis = () => {
+      if (document.hidden) stop();
+      else if (el.getBoundingClientRect().top < window.innerHeight && el.getBoundingClientRect().bottom > 0) play();
+    };
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !document.hidden) play();
+        else stop();
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(el);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      io.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
+      stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (i < words.length) return;
+    const t = window.setTimeout(() => {
+      setSnap(true);
+      setI(0);
+      requestAnimationFrame(() => requestAnimationFrame(() => setSnap(false)));
+    }, 820);
+    return () => window.clearTimeout(t);
+  }, [i, words.length]);
+
   return (
-    <>
-      <span className="sr-only">{words[i]}</span>
-      <span className="cycle" aria-hidden>
-        {words.map((word, n) => (
-          <span key={word} className={n === i ? 'is-on' : ''}>
-            {word}.
-          </span>
-        ))}
+    <span ref={root} className="cycle">
+      <span className="sr-only">{words[shown]}.</span>
+      <span className="cycle-sizer" aria-hidden>
+        {longest}.
       </span>
-    </>
+      <span className="cycle-mask" aria-hidden>
+        <span
+          className={snap ? 'cycle-track is-snap' : 'cycle-track'}
+          style={{ transform: `translate3d(0, calc(${-(i % loop)} * 1.12em), 0)` }}
+        >
+          {[...words, words[0]].map((word, n) => (
+            <span key={`${word}-${n}`}>{word}.</span>
+          ))}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function Manifesto({ text, cite }: { text: string; cite: string }) {
+  const ref = useRef<HTMLQuoteElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const show = () => {
+      el.classList.remove('will-cut');
+      el.classList.add('is-in');
+    };
+    if (reducedMotion() || el.getBoundingClientRect().top < window.innerHeight * 0.88) {
+      show();
+      return;
+    }
+    el.classList.add('will-cut');
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          show();
+          io.disconnect();
+        }
+      },
+      { threshold: 0.28, rootMargin: '0px 0px -8% 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <blockquote ref={ref} className="quote-band" data-track="view">
+      <p>
+        <span className="sr-only">{text}</span>
+        <span aria-hidden className="quote-line">
+          {text.split(/\s+/).map((word, n) => (
+            <span key={`${word}-${n}`} className="cut" style={{ ['--d' as string]: `${n * 55}ms` }}>
+              <span className="rise">{word}</span>
+            </span>
+          ))}
+        </span>
+      </p>
+      <cite>{cite}</cite>
+    </blockquote>
   );
 }
 
@@ -392,6 +486,7 @@ export default function Studio() {
   const [compact, setCompact] = useState(false);
   const [docked, setDocked] = useState(false);
   const [toTop, setToTop] = useState(false);
+  const [heroType, setHeroType] = useState<'static' | 'prep' | 'play'>('static');
   const light = useRef<HTMLDivElement>(null);
   const progress = useRef<HTMLSpanElement>(null);
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -446,6 +541,15 @@ export default function Studio() {
   }, [menu]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (reducedMotion()) return;
+    setHeroType('prep');
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setHeroType('play'));
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   useEffect(() => {
     remain.current = HERO_MS;
@@ -702,7 +806,7 @@ export default function Studio() {
 
       <main id="main" inert={menu ? true : undefined}>
         <section
-          className={hold || !heroOn || hidden ? 'studio-hero is-paused' : 'studio-hero'}
+          className={`studio-hero${hold || !heroOn || hidden ? ' is-paused' : ''}${heroType === 'prep' ? ' is-prep' : ''}${heroType === 'play' ? ' is-kinetic' : ''}`}
           style={{ ['--hero-ms' as string]: `${HERO_MS}ms` }}
           data-track="view"
           aria-label="Интерьеры FORMA"
@@ -736,12 +840,24 @@ export default function Studio() {
             </div>
             <div className="hero-mid">
               <h1>
-                Ваше место.
-                <br />
-                Ваша <em>форма</em> жизни.
+                <span className="sr-only">Ваше место. Ваша форма жизни.</span>
+                <span aria-hidden className="display-lines">
+                  <span className="cut">
+                    <span className="rise" style={{ ['--d' as string]: '40ms' }}>
+                      Ваше место.
+                    </span>
+                  </span>
+                  <span className="cut">
+                    <span className="rise" style={{ ['--d' as string]: '160ms' }}>
+                      Ваша <em className="metal">форма</em> жизни.
+                    </span>
+                  </span>
+                </span>
               </h1>
               <p className="hero-lead">
-                Проектируем квартиры и дома вокруг <WordCycle words={cycleWords} />
+                <span className="hero-line">
+                  Проектируем квартиры и дома вокруг <WordCycle words={cycleWords} />
+                </span>
                 <span className="hero-sub">От первого эскиза до сопровождения стройки.</span>
               </p>
               <div className="hero-actions">
@@ -764,13 +880,6 @@ export default function Studio() {
                 <strong>{active.name}</strong>
                 <span>{active.type}</span>
               </p>
-              <div className="hero-progress" aria-hidden>
-                {rooms.map((r, i) => (
-                  <span key={r.name} className={i === room ? 'is-on' : i < room ? 'is-done' : ''}>
-                    {i === room ? <i key={room} /> : <i />}
-                  </span>
-                ))}
-              </div>
               <div className="hero-film" role="group" aria-label="Выбор интерьера">
                 {rooms.map((r, i) => (
                   <button
@@ -785,17 +894,26 @@ export default function Studio() {
                   </button>
                 ))}
               </div>
-              <div className="hero-controls">
-                <button
-                  type="button"
-                  onClick={() => setRoom((room + rooms.length - 1) % rooms.length)}
-                  aria-label="Предыдущий интерьер"
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <button type="button" onClick={() => setRoom((room + 1) % rooms.length)} aria-label="Следующий интерьер">
-                  <ArrowRight size={16} />
-                </button>
+              <div className="hero-cluster">
+                <div className="hero-progress" aria-hidden>
+                  {rooms.map((r, i) => (
+                    <span key={r.name} className={i === room ? 'is-on' : i < room ? 'is-done' : ''}>
+                      {i === room ? <i key={room} /> : <i />}
+                    </span>
+                  ))}
+                </div>
+                <div className="hero-controls">
+                  <button
+                    type="button"
+                    onClick={() => setRoom((room + rooms.length - 1) % rooms.length)}
+                    aria-label="Предыдущий интерьер"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <button type="button" onClick={() => setRoom((room + 1) % rooms.length)} aria-label="Следующий интерьер">
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
               </div>
               <p className="sr-only" aria-live="polite">
                 {active.name}. {active.type}
@@ -807,7 +925,7 @@ export default function Studio() {
         <div className="marquee" aria-hidden>
           <div className="marquee-track">
             {[...ticker, ...ticker].map((item, i) => (
-              <span key={`${item}-${i}`}>
+              <span key={`${item}-${i}`} className={tickerEm.has(item) ? 'is-em' : ''}>
                 {item}
                 <b />
               </span>
@@ -1298,10 +1416,7 @@ export default function Studio() {
           </div>
         </section>
 
-        <blockquote className="quote-band" data-track="view">
-          <p>Дом должен работать на вас, а не наоборот.</p>
-          <cite>Манифест FORMA</cite>
-        </blockquote>
+        <Manifesto text="Дом должен работать на вас, а не наоборот." cite="Манифест FORMA" />
 
         <section className="close-band" data-track="view" aria-label="Начать проект">
           <img src={rooms[2].image} className="close-img" alt="" loading="lazy" decoding="async" width={1800} height={1200} />
@@ -1311,7 +1426,7 @@ export default function Studio() {
             <h2>
               Готовы придать
               <br />
-              <em>идеям форму?</em>
+              <em className="metal">идеям форму?</em>
             </h2>
             <p>Ориентир за полминуты. Заявка останется в студии — без звонков.</p>
             <div className="hero-actions">
