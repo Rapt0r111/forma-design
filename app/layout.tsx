@@ -100,7 +100,7 @@ const jsonLd = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" data-scroll-behavior="smooth">
       <head>
         <link rel="stylesheet" href="/fonts.css" />
         <link rel="preload" href="/cormorant-cyr.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
